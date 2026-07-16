@@ -4,6 +4,7 @@ import Input from '../components/Input';
 import { SiProbot } from 'react-icons/si';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
+import { apiUrl } from '../api';
 
 const Chatbot = () => {
   const [messages, setMessages] = useState([]);
@@ -33,7 +34,7 @@ const Chatbot = () => {
 
     try {
       setIsLoadingChat(true);
-      const response = await fetch('http://localhost:5000/api/chat', {
+      const response = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: updatedMessages }),
@@ -76,7 +77,7 @@ const Chatbot = () => {
     setIsSummarizing(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/summarize', {
+      const response = await fetch(apiUrl('/api/summarize'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

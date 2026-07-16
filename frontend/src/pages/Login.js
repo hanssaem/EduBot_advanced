@@ -2,6 +2,7 @@ import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SiProbot } from 'react-icons/si';
+import { apiUrl } from '../api';
 
 export default function Login() {
   const location = useLocation();
@@ -14,11 +15,10 @@ export default function Login() {
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken(); // ✅ Firebase에서 ID 토큰 가져오기
 
-      console.log('✅ Firebase 로그인 성공:', result.user);
-      console.log('✅ Firebase ID Token:', idToken);
+      console.log('✅ Firebase 로그인 성공:', result.user.email);
 
       // ✅ 백엔드로 ID 토큰 전송
-      const response = await fetch('http://localhost:5000/api/auth/login', {
+      const response = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

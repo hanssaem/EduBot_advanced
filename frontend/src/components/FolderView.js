@@ -3,6 +3,7 @@ import Notebook from './Notebook';
 import NotebookDetail from './NotebookDetail';
 import { BookOpenIcon } from '@heroicons/react/24/outline';
 import { ArrowLeftIcon } from '@heroicons/react/24/solid';
+import { apiUrl } from '../api';
 
 export default function FolderView({ folder, token, onBack }) {
   const [notes, setNotes] = useState([]);
@@ -14,7 +15,7 @@ export default function FolderView({ folder, token, onBack }) {
     setLoading(true);
     try {
       const response = await fetch(
-        `http://localhost:5000/api/folders/${folder._id}/notes`,
+        apiUrl(`/api/folders/${folder._id}/notes`),
         {
           method: 'GET',
           headers: {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CalendarIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
+import { apiUrl } from '../api';
 
 export default function ReminderCard({ userToken, onNoteClick }) {
   const [notes, setNotes] = useState([]);
@@ -8,7 +9,7 @@ export default function ReminderCard({ userToken, onNoteClick }) {
 
   const fetchReviews = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/review-notes', {
+      const response = await fetch(apiUrl('/api/review-notes'), {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${userToken}`,
@@ -45,7 +46,7 @@ export default function ReminderCard({ userToken, onNoteClick }) {
   const completeReview = async (noteId) => {
     try {
       const response = await fetch(
-        `http://localhost:5000/api/review-notes/${noteId}/check`,
+        apiUrl(`/api/review-notes/${noteId}/check`),
         {
           method: 'PATCH',
           headers: {

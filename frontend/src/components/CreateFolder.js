@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Modal from './Modal';
 import { FolderPlusIcon } from '@heroicons/react/24/solid';
 import { useNavigate } from 'react-router-dom';
+import { apiUrl } from '../api';
 
 export default function CreateFolder({ userToken, onSuccess }) {
   const navigate = useNavigate();
@@ -11,7 +12,7 @@ export default function CreateFolder({ userToken, onSuccess }) {
 
   const createFolder = async (name) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/folders`, {
+      const response = await fetch(apiUrl('/api/folders'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

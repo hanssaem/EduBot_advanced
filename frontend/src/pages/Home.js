@@ -9,6 +9,7 @@ import NotebookDetail from '../components/NotebookDetail';
 import ReminderCard from '../components/ReminderCard';
 import CreateFolder from '../components/CreateFolder';
 import FolderView from '../components/FolderView';
+import { apiUrl } from '../api';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -25,7 +26,7 @@ export default function Home() {
 
   const fetchFolders = async (token) => {
     try {
-      const response = await fetch('http://localhost:5000/api/folders', {
+      const response = await fetch(apiUrl('/api/folders'), {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -42,7 +43,7 @@ export default function Home() {
   const fetchNotes = async (token) => {
     try {
       const response = await fetch(
-        'http://localhost:5000/api/notes/no-folder',
+        apiUrl('/api/notes/no-folder'),
         {
           method: 'GET',
           headers: {

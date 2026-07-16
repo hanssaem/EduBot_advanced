@@ -8,6 +8,7 @@ import {
 } from '@heroicons/react/24/solid';
 import Modal from './Modal';
 import Dropdown from './Dropdown';
+import { apiUrl } from '../api';
 
 const NotebookDetail = ({
   isOpen,
@@ -40,7 +41,7 @@ const NotebookDetail = ({
 
     try {
       const response = await fetch(
-        `http://localhost:5000/api/notes/${noteId}/move`,
+        apiUrl(`/api/notes/${noteId}/move`),
         {
           method: 'PATCH',
           headers: {
@@ -66,7 +67,7 @@ const NotebookDetail = ({
 
   const fetchFolders = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/folders', {
+      const response = await fetch(apiUrl('/api/folders'), {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${userToken}`,
@@ -88,7 +89,7 @@ const NotebookDetail = ({
   const updateNote = async (noteId, newTitle, newContent, userToken) => {
     try {
       const response = await fetch(
-        `http://localhost:5000/api/notes/${noteId}`,
+        apiUrl(`/api/notes/${noteId}`),
         {
           method: 'PATCH',
           headers: {
@@ -112,7 +113,7 @@ const NotebookDetail = ({
   const deleteNote = async (noteId, userToken) => {
     try {
       const response = await fetch(
-        `http://localhost:5000/api/notes/${noteId}`,
+        apiUrl(`/api/notes/${noteId}`),
         {
           method: 'DELETE',
           headers: {
