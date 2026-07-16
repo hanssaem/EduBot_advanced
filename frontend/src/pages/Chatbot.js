@@ -61,6 +61,11 @@ const Chatbot = () => {
   };
 
   const handleSummarize = async () => {
+    if (isLoadingChat) {
+      alert('에듀봇 답변이 끝난 뒤 요약해주세요.');
+      return;
+    }
+
     if (messages.length === 0) {
       alert('대화 내용이 없습니다.');
       return;
@@ -82,7 +87,6 @@ const Chatbot = () => {
       });
 
       if (response.ok) {
-        const data = await response.json();
         navigate('/'); // 요약 완료 후 홈으로 이동
       } else {
         alert('요약 저장에 실패했습니다.');
@@ -169,6 +173,7 @@ const Chatbot = () => {
           messages={messages}
           onSendMessage={handleSendMessage}
           onSummarize={handleSummarize}
+          isLoadingChat={isLoadingChat}
         />
       </div>
     </div>

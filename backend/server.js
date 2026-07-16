@@ -105,33 +105,42 @@ app.post('/api/summarize', userRateLimiter, async (req, res) => {
     return res.status(400).json({ error: '대화 내용이 없습니다.' });
   }
 
-  const formattedMessages = messages.map((msg) => ({
-    role: msg.sender === 'User' ? 'user' : 'assistant',
-    content: msg.message,
-  }));
+  const formattedMessages = messages
+    .filter((msg) => msg?.message?.trim())
+    .map((msg, index) => ({
+      turn: index + 1,
+      speaker: msg.sender === 'User' ? '사용자' : '에듀봇',
+      content: msg.message.trim(),
+    }));
+
+  if (formattedMessages.length === 0) {
+    return res.status(400).json({ error: '요약할 대화 내용이 없습니다.' });
+  }
+
+  const transcript = formattedMessages
+    .map((msg) => `[${msg.turn}] ${msg.speaker}: ${msg.content}`)
+    .join('\n\n');
 
   // GPT 프롬프트 설정 (요약 + 제목 생성)
   const summaryPrompt = `
-  당신은 똑똑한 학습 도우미입니다. 지금부터 아래의 대화를 학습 노트 형식으로 정리해주세요.
+  당신은 학습 대화를 누적 정리하는 전문 튜터입니다.
+  아래 "전체 대화 기록"의 모든 턴을 처음부터 끝까지 읽고, 마지막 대화만 요약하지 말고 전체 흐름을 학습 노트로 정리하세요.
 
-  📌 반드시 아래의 출력 형식을 **정확히 따르세요**:
+  규칙:
+  - 출력은 반드시 한국어로 작성하세요.
+  - 앞부분 대화, 중간 대화, 마지막 대화의 핵심을 모두 반영하세요.
+  - 같은 내용은 합쳐도 되지만, 서로 다른 질문/답변 주제는 빠뜨리지 마세요.
+  - 사용자가 물어본 내용과 에듀봇이 설명한 핵심 개념을 함께 정리하세요.
+  - JSON 외의 문장은 절대 출력하지 마세요.
 
-  제목: (대화를 대표하는 한 줄 요약)
-  요약:
-  - (핵심 내용을 간결하고 명확하게 정리)
-  - (중요 개념이나 팁을 항목 형태로 나열)
-  - (불필요한 대화는 생략)
+  JSON 형식:
+  {
+    "title": "전체 대화를 대표하는 짧은 제목",
+    "summary": "- 전체 대화의 첫 번째 핵심\\n- 전체 대화의 두 번째 핵심\\n- 전체 대화의 세 번째 핵심"
+  }
 
-  ⚠️ 출력 형식을 지키지 않으면 오류가 발생합니다. "제목:", "요약:" 키워드는 반드시 포함해주세요.
-
-  ---
-
-  ${formattedMessages.map((m) => `${m.role}: ${m.content}`).join('\n')}
-
-  ---
-
-  제목: (한 줄로 짧게)
-  요약:
+  전체 대화 기록:
+  ${transcript}
   `;
 
   const requestOptions = {
@@ -142,7 +151,8 @@ app.post('/api/summarize', userRateLimiter, async (req, res) => {
     data: {
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: summaryPrompt }],
-      temperature: 0.7,
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
       max_tokens: 2048,
     },
   };
@@ -155,16 +165,24 @@ app.post('/api/summarize', userRateLimiter, async (req, res) => {
 
     const aiResponse = response.data.choices[0].message.content;
 
-    // 응답에서 요약과 제목 분리
-    const match = aiResponse.match(/제목:\s*(.+)\n요약:\s*(.+)/s);
-    if (!match) {
+    let parsed;
+    try {
+      parsed = JSON.parse(aiResponse);
+    } catch (parseError) {
+      console.error('요약 JSON 파싱 실패:', aiResponse);
       return res
         .status(500)
         .json({ error: '응답에서 제목과 요약을 추출하지 못했습니다.' });
     }
 
-    const title = match[1].trim();
-    const summary = match[2].trim();
+    const title = parsed.title?.trim();
+    const summary = parsed.summary?.trim();
+
+    if (!title || !summary) {
+      return res
+        .status(500)
+        .json({ error: '응답에 제목 또는 요약이 없습니다.' });
+    }
 
     // DB 저장
     await Note.create({
@@ -190,7 +208,7 @@ app.post('/api/auth/login', async (req, res) => {
 
   try {
     const decodedToken = await admin.auth().verifyIdToken(idToken);
-    console.log('✅ Firebase 인증 성공:', decodedToken);
+    console.log('✅ Firebase 인증 성공:', decodedToken.email);
 
     const { uid, email } = decodedToken;
 

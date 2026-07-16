@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { HiArrowUp } from "react-icons/hi";
 import { useNavigate } from 'react-router-dom';
 
-const Input = ({ messages, onSendMessage, onSummarize }) => {
+const Input = ({ messages, onSendMessage, onSummarize, isLoadingChat }) => {
     const [input, setInput] = useState('');
     const navigate = useNavigate();
 
@@ -32,8 +32,9 @@ const Input = ({ messages, onSendMessage, onSummarize }) => {
                         </button>
                         <button
                             type="button"
-                            className="px-6 py-3 bg-yellow-400 text-white rounded-full text-xl shadow-md"
+                            className="px-6 py-3 bg-yellow-400 text-white rounded-full text-xl shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={onSummarize}
+                            disabled={isLoadingChat}
                         >
                             요약하기
                         </button>
