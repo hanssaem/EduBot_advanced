@@ -9,6 +9,7 @@ import NotebookDetail from '../components/NotebookDetail';
 import ReminderCard from '../components/ReminderCard';
 import CreateFolder from '../components/CreateFolder';
 import FolderView from '../components/FolderView';
+import PdfStudy from '../components/PdfStudy';
 import { apiUrl } from '../api';
 
 export default function Home() {
@@ -172,6 +173,11 @@ export default function Home() {
               setSelectedNotebook(note);
               setDetailOpen(true);
             }}
+          />
+
+          <PdfStudy
+            userToken={userToken}
+            onSummaryCreated={() => fetchNotes(userToken)}
           />
 
           <div className="flex flex-col flex-1 pb-10 mt-12 w-[1200px]">
