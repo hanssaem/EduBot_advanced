@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Notebook from './Notebook';
 import NotebookDetail from './NotebookDetail';
 import { BookOpenIcon } from '@heroicons/react/24/outline';
@@ -11,7 +11,7 @@ export default function FolderView({ folder, token, onBack }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const fetchFolderNotes = async (token) => {
+  const fetchFolderNotes = useCallback(async (token) => {
     setLoading(true);
     try {
       const response = await fetch(
@@ -31,13 +31,13 @@ export default function FolderView({ folder, token, onBack }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [folder._id]);
 
   useEffect(() => {
     if (folder && token) {
       fetchFolderNotes(token);
     }
-  }, [folder, token]);
+  }, [folder, token, fetchFolderNotes]);
 
   const handleNoteClick = (note) => {
     setSelectedNotebook(note);

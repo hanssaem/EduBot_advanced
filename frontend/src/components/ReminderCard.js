@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CalendarIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
 import { apiUrl } from '../api';
 
@@ -7,7 +7,7 @@ export default function ReminderCard({ userToken, onNoteClick }) {
   const [loading, setLoading] = useState(true);
   const [isVisible, setIsVisible] = useState(true); // 애니메이션 제어용
 
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     try {
       const response = await fetch(apiUrl('/api/review-notes'), {
         method: 'GET',
@@ -35,13 +35,13 @@ export default function ReminderCard({ userToken, onNoteClick }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userToken]);
 
   useEffect(() => {
     if (userToken) {
       fetchReviews();
     }
-  }, [userToken]);
+  }, [userToken, fetchReviews]);
 
   const completeReview = async (noteId) => {
     try {

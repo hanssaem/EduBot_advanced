@@ -21,7 +21,7 @@ const Chatbot = () => {
       setUser(currentUser);
     });
     return () => unsubscribe();
-  }, []);
+  }, [auth]);
 
   const addMessage = (sender, message) => {
     setMessages((prevMessages) => [...prevMessages, { sender, message }]);

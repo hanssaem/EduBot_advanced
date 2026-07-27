@@ -36,7 +36,9 @@ const Dropdown = ({ items, selectedItem, onSelect, onToggle }) => {
         <div className="max-h-[118px] overflow-y-auto flex flex-col">
           {items?.map((item) => (
             <li key={item?._id}>
-              <a onClick={() => handleItemClick(item)}>{item?.name}</a>
+              <button type="button" onClick={() => handleItemClick(item)}>
+                {item?.name}
+              </button>
             </li>
           ))}
         </div>

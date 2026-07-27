@@ -20,8 +20,6 @@ export default function Home() {
   const [userToken, setUserToken] = useState(null);
   const [notes, setNotes] = useState([]); // Combined array for folders and notebooks
   const [folders, setFolders] = useState([]);
-  const [loading, setLoading] = useState(true);
-
   const auth = getAuth();
 
   const fetchFolders = async (token) => {
@@ -73,8 +71,6 @@ export default function Home() {
           console.error('노트 가져오기 실패:', error);
         }
       }
-
-      setLoading(false);
     });
 
     return () => unsubscribe();
