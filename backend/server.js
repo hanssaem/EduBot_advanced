@@ -4,11 +4,15 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const axios = require('axios');
 const admin = require('firebase-admin');
+const multer = require('multer');
+const { PDFParse } = require('pdf-parse');
 require('dotenv').config();
 
 const User = require('./models/User'); // ✅ User 모델 추가
 const Note = require('./models/Note'); // ✅ Note 모델 추가
 const Folder = require('./models/Folder');
+const PdfDocument = require('./models/PdfDocument');
+const PdfChunk = require('./models/PdfChunk');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -94,8 +98,195 @@ const verifyToken = async (req, res, next) => {
 
 const apiKey = process.env.OPENAI_API_KEY;
 const apiEndpoint = 'https://api.openai.com/v1/chat/completions';
+const embeddingEndpoint = 'https://api.openai.com/v1/embeddings';
 
 const userRateLimiter = createUserRateLimiter();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 15 * 1024 * 1024,
+  },
+  fileFilter: (req, file, callback) => {
+    if (file.mimetype === 'application/pdf') {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error('PDF 파일만 업로드할 수 있습니다.'));
+  },
+});
+
+const normalizeWhitespace = (text) =>
+  text
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+const createChunks = (text, maxLength = 2500, overlap = 300) => {
+  const chunks = [];
+  let start = 0;
+
+  while (start < text.length) {
+    const end = Math.min(start + maxLength, text.length);
+    const chunk = text.slice(start, end).trim();
+
+    if (chunk) chunks.push(chunk);
+    if (end === text.length) break;
+
+    start = Math.max(end - overlap, start + 1);
+  }
+
+  return chunks;
+};
+
+const callChatCompletion = async ({ messages, temperature = 0.3, maxTokens = 2048 }) => {
+  const response = await axios.post(
+    apiEndpoint,
+    {
+      model: 'gpt-4o-mini',
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+    }
+  );
+
+  return response.data.choices[0].message.content;
+};
+
+const createEmbedding = async (input) => {
+  const response = await axios.post(
+    embeddingEndpoint,
+    {
+      model: 'text-embedding-3-small',
+      input,
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+    }
+  );
+
+  return response.data.data[0].embedding;
+};
+
+const createEmbeddings = async (inputs) => {
+  const response = await axios.post(
+    embeddingEndpoint,
+    {
+      model: 'text-embedding-3-small',
+      input: inputs,
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+    }
+  );
+
+  return response.data.data.map((item) => item.embedding);
+};
+
+const cosineSimilarity = (a, b) => {
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < Math.min(a.length, b.length); i += 1) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+
+  if (!normA || !normB) return 0;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+};
+
+const summarizePdfChunks = async (chunks, fileName) => {
+  const batchSize = 6;
+  const partialSummaries = [];
+
+  for (let i = 0; i < chunks.length; i += batchSize) {
+    const batch = chunks.slice(i, i + batchSize);
+    const chunkDigest = batch
+      .map((chunk, index) => `[#${i + index + 1}]\n${chunk}`)
+      .join('\n\n---\n\n');
+
+    const partialSummary = await callChatCompletion({
+      messages: [
+        {
+          role: 'system',
+          content:
+            '당신은 긴 PDF 학습자료를 빠짐없이 한국어로 압축 요약하는 튜터입니다.',
+        },
+        {
+          role: 'user',
+          content: `
+파일명: ${fileName}
+구간: ${i + 1}번 청크부터 ${i + batch.length}번 청크
+
+아래 PDF 일부를 한국어로 짧게 요약하세요.
+영어 원문이어도 반드시 한국어로 정리하세요.
+
+PDF 일부:
+${chunkDigest}
+`,
+        },
+      ],
+      temperature: 0.2,
+      maxTokens: 700,
+    });
+
+    partialSummaries.push(
+      `[구간 ${Math.floor(i / batchSize) + 1}]\n${partialSummary}`
+    );
+  }
+
+  return callChatCompletion({
+    messages: [
+      {
+        role: 'system',
+        content:
+          '당신은 영어/한국어 PDF 학습자료를 한국어 학습 노트로 압축 요약하는 튜터입니다.',
+      },
+      {
+        role: 'user',
+        content: `
+파일명: ${fileName}
+
+아래 PDF 텍스트를 읽고 한국어로 초압축 학습 요약을 작성하세요.
+영어 자료여도 반드시 자연스러운 한국어로 정리하세요.
+
+형식:
+# 한 줄 제목
+
+## 핵심 요약
+- 핵심 1
+- 핵심 2
+- 핵심 3
+
+## 시험/복습 포인트
+- 포인트 1
+- 포인트 2
+
+PDF 텍스트:
+${partialSummaries.join('\n\n---\n\n')}
+`,
+      },
+    ],
+    temperature: 0.2,
+    maxTokens: 1800,
+  });
+};
 
 app.post('/api/chat', userRateLimiter, async (req, res) => {
   const { messages } = req.body; // 🔥 `prompt` 대신 `messages` 배열 받기
@@ -233,6 +424,196 @@ app.post('/api/summarize', userRateLimiter, async (req, res) => {
     res.status(500).json({ error: '요약 생성 중 오류 발생' });
   }
 });
+
+app.post(
+  '/api/pdf-documents',
+  verifyToken,
+  userRateLimiter,
+  upload.single('pdf'),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'PDF 파일을 업로드해주세요.' });
+      }
+
+      const parser = new PDFParse({ data: req.file.buffer });
+      const parsedPdf = await parser.getText();
+      await parser.destroy();
+      const text = normalizeWhitespace(parsedPdf.text || '');
+
+      if (text.length < 100) {
+        return res
+          .status(400)
+          .json({ error: 'PDF에서 충분한 텍스트를 추출하지 못했습니다.' });
+      }
+
+      const chunks = createChunks(text);
+      const summary = await summarizePdfChunks(chunks, req.file.originalname);
+      const title =
+        summary.match(/^#\s+(.+)$/m)?.[1]?.trim() ||
+        req.file.originalname.replace(/\.pdf$/i, '');
+
+      const note = await Note.create({
+        userId: req.user.email,
+        title,
+        content: summary,
+        createdAt: new Date(),
+      });
+
+      const document = await PdfDocument.create({
+        userId: req.user.email,
+        title,
+        fileName: req.file.originalname,
+        summary,
+        textLength: text.length,
+        chunkCount: chunks.length,
+        noteId: note._id,
+      });
+
+      const chunkDocs = [];
+      const embeddingBatchSize = 64;
+
+      for (let i = 0; i < chunks.length; i += embeddingBatchSize) {
+        const batch = chunks.slice(i, i + embeddingBatchSize);
+        const embeddings = await createEmbeddings(batch);
+
+        batch.forEach((chunk, index) => {
+          chunkDocs.push({
+            documentId: document._id,
+            userId: req.user.email,
+            chunkIndex: i + index,
+            content: chunk,
+            embedding: embeddings[index],
+          });
+        });
+      }
+
+      await PdfChunk.insertMany(chunkDocs);
+
+      res.status(201).json({
+        message: 'PDF 요약이 생성되었습니다.',
+        document,
+        note,
+      });
+    } catch (error) {
+      console.error('PDF 처리 오류:', error);
+      res.status(500).json({ error: 'PDF 처리 중 오류가 발생했습니다.' });
+    }
+  }
+);
+
+app.get('/api/pdf-documents', verifyToken, async (req, res) => {
+  try {
+    const documents = await PdfDocument.find({ userId: req.user.email }).sort({
+      createdAt: -1,
+    });
+
+    res.status(200).json({ documents });
+  } catch (error) {
+    console.error('PDF 문서 조회 오류:', error);
+    res.status(500).json({ error: 'PDF 문서 조회 실패' });
+  }
+});
+
+app.get('/api/pdf-documents/:id', verifyToken, async (req, res) => {
+  try {
+    const document = await PdfDocument.findOne({
+      _id: req.params.id,
+      userId: req.user.email,
+    });
+
+    if (!document) {
+      return res.status(404).json({ error: 'PDF 문서를 찾을 수 없습니다.' });
+    }
+
+    res.status(200).json({ document });
+  } catch (error) {
+    console.error('PDF 문서 상세 조회 오류:', error);
+    res.status(500).json({ error: 'PDF 문서 상세 조회 실패' });
+  }
+});
+
+app.post(
+  '/api/pdf-documents/:id/questions',
+  verifyToken,
+  userRateLimiter,
+  async (req, res) => {
+    try {
+      const { question } = req.body;
+
+      if (!question?.trim()) {
+        return res.status(400).json({ error: '질문을 입력해주세요.' });
+      }
+
+      const document = await PdfDocument.findOne({
+        _id: req.params.id,
+        userId: req.user.email,
+      });
+
+      if (!document) {
+        return res.status(404).json({ error: 'PDF 문서를 찾을 수 없습니다.' });
+      }
+
+      const questionEmbedding = await createEmbedding(question.trim());
+      const chunks = await PdfChunk.find({
+        documentId: document._id,
+        userId: req.user.email,
+      });
+
+      const topChunks = chunks
+        .map((chunk) => ({
+          content: chunk.content,
+          score: cosineSimilarity(questionEmbedding, chunk.embedding),
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+
+      const context = topChunks
+        .map((chunk, index) => `[근거 ${index + 1}]\n${chunk.content}`)
+        .join('\n\n---\n\n');
+
+      const answer = await callChatCompletion({
+        messages: [
+          {
+            role: 'system',
+            content:
+              '당신은 PDF 학습자료 기반 질의응답 튜터입니다. 제공된 근거 안에서만 답하고, 답변은 한국어로 작성하세요.',
+          },
+          {
+            role: 'user',
+            content: `
+PDF 제목: ${document.title}
+
+질문:
+${question.trim()}
+
+관련 PDF 근거:
+${context}
+
+답변 규칙:
+- 근거에 있는 내용만 사용하세요.
+- 모르면 "PDF에서 해당 내용을 찾지 못했습니다."라고 답하세요.
+- 핵심 답변을 먼저 쓰고, 필요하면 근거를 짧게 덧붙이세요.
+`,
+          },
+        ],
+        temperature: 0.2,
+        maxTokens: 900,
+      });
+
+      res.status(200).json({
+        answer,
+        sources: topChunks.map((chunk) => ({
+          preview: chunk.content.slice(0, 240),
+          score: chunk.score,
+        })),
+      });
+    } catch (error) {
+      console.error('PDF 질문 답변 오류:', error);
+      res.status(500).json({ error: 'PDF 질문 답변 중 오류가 발생했습니다.' });
+    }
+  }
+);
 
 /* ✅ 사용자 관련 API */
 // 📌 사용자 정보 저장 (Google 로그인 후)
